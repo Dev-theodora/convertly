@@ -1,21 +1,96 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+ import { useEffect, useId, useMemo, useRef, useState } from "react"
 
 type Currency = {
   code: string
   name: string
-  country: string
+  country?: string
   symbol: string
-  usdRate: number
   decimals: number
 }
 
+  type ApiCurrency = {
+  iso_code: string
+  name: string
+  symbol: string | null
+  start_date: string | null
+  end_date: string | null
+}
+
+
+type ApiRate = {
+  date: string
+  base: string
+  quote: string
+  rate: number
+}
+
+const API_URL = "https://api.frankfurter.dev/v2"
+
+
+async function fetchCurrencies(): Promise<Currency[]> {
+  const response = await fetch(`${API_URL}/currencies`)
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch currencies")
+  }
+
+  const data: ApiCurrency[] = await response.json()
+   console.log("Currencies received:", data.length)
+console.log("Currency data:", data)
+  return data.map((item) => ({
+    code: item.iso_code,
+    name: item.name,
+    country: "",
+    symbol: item.symbol || item.iso_code,
+    decimals: 2,
+  }))
+}
+
+async function fetchRate(from: string, to: string): Promise<number> {
+  const response = await fetch(
+    `${API_URL}/rates?base=${from}&quotes=${to}`
+  )
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch exchange rate")
+  }
+
+  const data: ApiRate[] = await response.json()
+
+  if (!data.length) {
+    throw new Error("Exchange rate not available")
+  }
+
+  return data[0].rate
+}
+
+async function fetchRateHistory(
+  from: string,
+  to: string,
+): Promise<ApiRate[]> {
+  const end = new Date()
+  const start = new Date()
+  start.setDate(end.getDate() - 7)
+
+  const formatDate = (date: Date) =>
+    date.toISOString().slice(0, 10)
+
+  const response = await fetch(
+    `${API_URL}/rates?base=${from}&quotes=${to}&from=${formatDate(start)}&to=${formatDate(end)}`
+  )
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch historical rates")
+  }
+
+  return response.json()
+}
 const currencies: Currency[] = [
   {
     code: "USD",
     name: "US Dollar",
     country: "United States",
     symbol: "$",
-    usdRate: 1,
     decimals: 2,
   },
   {
@@ -23,7 +98,6 @@ const currencies: Currency[] = [
     name: "Euro",
     country: "European Union",
     symbol: "€",
-    usdRate: 0.9217,
     decimals: 2,
   },
   {
@@ -31,7 +105,6 @@ const currencies: Currency[] = [
     name: "British Pound",
     country: "United Kingdom",
     symbol: "£",
-    usdRate: 0.7894,
     decimals: 2,
   },
   {
@@ -39,7 +112,6 @@ const currencies: Currency[] = [
     name: "Nigerian Naira",
     country: "Nigeria",
     symbol: "₦",
-    usdRate: 1512.4,
     decimals: 2,
   },
   {
@@ -47,7 +119,6 @@ const currencies: Currency[] = [
     name: "Canadian Dollar",
     country: "Canada",
     symbol: "C$",
-    usdRate: 1.3618,
     decimals: 2,
   },
   {
@@ -55,7 +126,6 @@ const currencies: Currency[] = [
     name: "Australian Dollar",
     country: "Australia",
     symbol: "A$",
-    usdRate: 1.5182,
     decimals: 2,
   },
   {
@@ -63,7 +133,6 @@ const currencies: Currency[] = [
     name: "Japanese Yen",
     country: "Japan",
     symbol: "¥",
-    usdRate: 149.62,
     decimals: 0,
   },
   {
@@ -71,13 +140,10 @@ const currencies: Currency[] = [
     name: "Ghanaian Cedi",
     country: "Ghana",
     symbol: "GH₵",
-    usdRate: 15.48,
     decimals: 2,
   },
 ]
 
-const chartOffsets = [-0.0042, -0.0015, -0.0022, 0.0012, 0.0038, 0.0021, 0]
-const dayLabels = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "TODAY"]
 
 function Icon({
   name,
@@ -134,34 +200,72 @@ function Icon({
     </svg>
   )
 }
+ const cryptoIcons = import.meta.glob(
+  "../node_modules/cryptocurrency-icons/svg/color/*.svg",
+  {
+    eager: true,
+    query: "?url",
+    import: "default",
+  }
+) as Record<string, string>
 
 function Flag({ code }: { code: string }) {
+  const [imageError, setImageError] = useState(false)
+
+  const normalizedCode = code.toLowerCase()
+
+  const cryptoIcon = Object.entries(cryptoIcons).find(
+    ([path]) => path.toLowerCase().endsWith(`/${normalizedCode}.svg`)
+  )?.[1]
+
+  if (cryptoIcon) {
+    return (
+      <img
+        src={cryptoIcon}
+        className="currency-icon"
+        alt=""
+      />
+    )
+  }
+
+  if (imageError) {
+    return (
+      <span className="currency-logo-fallback">
+        {code.slice(0, 2)}
+      </span>
+    )
+  }
+
   return (
-    <span className={`flag flag-${code.toLowerCase()}`} aria-hidden="true">
-      <i />
-    </span>
+    <img
+      src={`https://wise.com/web-art/assets/flags/${normalizedCode}.svg`}
+      className="currency-icon"
+      alt=""
+      onError={() => setImageError(true)}
+    />
   )
 }
-
 function CurrencyPicker({
   currency,
   onSelect,
   label,
+  availableCurrencies,
 }: {
   currency: Currency
   onSelect: (currency: Currency) => void
   label: string
+  availableCurrencies: Currency[]
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const rootRef = useRef<HTMLDivElement>(null)
   const searchId = useId()
-  const filtered = currencies.filter((item) =>
-    `${item.code} ${item.name} ${item.country}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  )
-
+  const filtered = availableCurrencies.filter((item) =>
+  `${item.code} ${item.name} ${item.country ?? ""}`
+    .toLowerCase()
+    .includes(query.toLowerCase()),
+)
+    
   useEffect(() => {
     const close = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
@@ -262,36 +366,69 @@ function formatNumber(value: number, decimals = 2) {
   }).format(Number.isFinite(value) ? value : 0)
 }
 
+
+
 function RateChart({
   rate,
   from,
   to,
+  history,
 }: {
   rate: number
   from: Currency
   to: Currency
+  history: ApiRate[]
 }) {
   const width = 700
   const height = 170
-  const points = chartOffsets.map((offset, index) => ({
-    x: (index / (chartOffsets.length - 1)) * width,
-    value: rate * (1 + offset),
+
+  const values = history.map((item) => item.rate)
+  const hasHistory = values.length > 0
+
+  const high = hasHistory ? Math.max(...values) : 0
+  const low = hasHistory ? Math.min(...values) : 0
+
+  const change =
+    values.length > 1
+      ? ((values[values.length - 1] / values[0]) - 1) * 100
+      : 0
+
+  const rising = change >= 0
+
+  const min = hasHistory ? low * 0.999 : 0
+  const max = hasHistory ? high * 1.001 : 1
+  const range = max - min || 1
+
+  const points = history.map((item, index) => ({
+    date: item.date,
+    value: item.rate,
+    x:
+      history.length > 1
+        ? (index / (history.length - 1)) * width
+        : width / 2,
+    y:
+      height -
+      ((item.rate - min) / range) * (height - 24) -
+      12,
   }))
-  const values = points.map((point) => point.value)
-  const min = Math.min(...values) * 0.999
-  const max = Math.max(...values) * 1.001
-  const plotted = points.map((point) => ({
-    ...point,
-    y: height - ((point.value - min) / (max - min)) * (height - 24) - 12,
-  }))
-  const line = plotted
-    .map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`)
+
+  const line = points
+    .map((point, index) =>
+      (index === 0 ? "M" : "L") + " " + point.x + " " + point.y
+    )
     .join(" ")
-  const area = `${line} L ${width} ${height} L 0 ${height} Z`
+
+  const area = hasHistory
+    ? `${line} L ${points[points.length - 1].x} ${height} L ${points[0].x} ${height} Z`
+    : ""
+
   const id = `chart-${from.code}-${to.code}`
-  const high = Math.max(...values)
-  const low = Math.min(...values)
-  const change = (values[values.length - 1] / values[0] - 1) * 100
+
+  const formatDate = (date: string) =>
+    new Date(`${date}T00:00:00`).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    })
 
   return (
     <section className="chart-card" aria-labelledby="trend-title">
@@ -305,61 +442,88 @@ function RateChart({
             {from.code} to {to.code}
           </h2>
         </div>
-        <div className="trend-badge">+{Math.abs(change).toFixed(2)}%</div>
+
+        <div className={`trend-badge ${rising ? "rising" : "falling"}`}>
+          {hasHistory
+            ? `${rising ? "+" : ""}${change.toFixed(2)}%`
+            : "—"}
+        </div>
       </div>
+
       <div className="chart-stats">
         <div>
           <span>Current</span>
-          <strong>{rate.toFixed(rate > 100 ? 2 : 4)}</strong>
+          <strong>
+            {rate ? rate.toFixed(rate > 100 ? 2 : 4) : "—"}
+          </strong>
         </div>
         <div>
           <span>7-day high</span>
-          <strong>{high.toFixed(rate > 100 ? 2 : 4)}</strong>
+          <strong>
+            {hasHistory ? high.toFixed(rate > 100 ? 2 : 4) : "—"}
+          </strong>
         </div>
         <div>
           <span>7-day low</span>
-          <strong>{low.toFixed(rate > 100 ? 2 : 4)}</strong>
+          <strong>
+            {hasHistory ? low.toFixed(rate > 100 ? 2 : 4) : "—"}
+          </strong>
         </div>
       </div>
+
       <div className="chart-wrap">
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          preserveAspectRatio="none"
-          role="img"
-          aria-label={`Seven day demonstration exchange rate chart for ${from.code} to ${to.code}`}
-        >
-          <defs>
-            <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#2864ff" stopOpacity=".22" />
-              <stop offset="100%" stopColor="#2864ff" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <path className="chart-grid" d="M0 40H700M0 90H700M0 140H700" />
-          <path d={area} fill={`url(#${id})`} />
-          <path className="chart-line" d={line} />
-          {plotted.map((point, index) => (
-            <circle
-              key={index}
-              className={
-                index === plotted.length - 1
-                  ? "chart-point active"
-                  : "chart-point"
-              }
-              cx={point.x}
-              cy={point.y}
-              r={index === plotted.length - 1 ? 5 : 3}
-            />
-          ))}
-        </svg>
-        <div className="chart-labels">
-          {dayLabels.map((day) => (
-            <span key={day}>{day}</span>
-          ))}
-        </div>
+        {hasHistory ? (
+          <>
+            <svg
+              viewBox={`0 0 ${width} ${height}`}
+              preserveAspectRatio="none"
+              role="img"
+              aria-label={`Historical exchange rate chart for ${from.code} to ${to.code}`}
+            >
+              <defs>
+                <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#2864ff" stopOpacity=".22" />
+                  <stop offset="100%" stopColor="#2864ff" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+
+              <path
+                className="chart-grid"
+                d="M0 40H700M0 90H700M0 140H700"
+              />
+
+              <path d={area} fill={`url(#${id})`} />
+
+              <path
+                className={`chart-line ${rising ? "rising" : "falling"}`}
+                d={line}
+              />
+
+              {points.map((point, index) => (
+                <circle
+                  key={point.date}
+                  className={index === points.length - 1
+                    ? "chart-point active"
+                    : "chart-point"}
+                  cx={point.x}
+                  cy={point.y}
+                  r={index === points.length - 1 ? 5 : 3}
+                />
+              ))}
+            </svg>
+
+            <div className="chart-labels">
+              <span>{formatDate(points[0].date)}</span>
+              <span>{formatDate(points[points.length - 1].date)}</span>
+            </div>
+          </>
+        ) : (
+          <p>No historical rates available for this currency pair.</p>
+        )}
       </div>
+
       <p className="demo-note">
-        <span>DEMO</span> Historical values are illustrative and not intended
-        for trading.
+        Historical reference rates · Source: Frankfurter
       </p>
     </section>
   )
@@ -368,24 +532,84 @@ function RateChart({
 export default function App() {
   const [from, setFrom] = useState(currencies[0])
   const [to, setTo] = useState(currencies[1])
+  const [rate, setRate] = useState(0)
+   const [history, setHistory] = useState<ApiRate[]>([])
+const [lastUpdated, setLastUpdated] = useState("")
+const [rateLoading, setRateLoading] = useState(false)
+const [rateError, setRateError] = useState("")
+  const [availableCurrencies, setAvailableCurrencies] =
+  useState<Currency[]>(currencies)
+  useEffect(() => {
+  fetchCurrencies()
+    .then((data) => {
+      setAvailableCurrencies(data)
+    })
+    .catch((error) => {
+      console.error("Currency loading error:", error)
+    })
+}, []) 
+   useEffect(() => {
+  if (from.code === to.code) {
+    setRate(1)
+    setHistory([])
+    setRateError("")
+    setLastUpdated("")
+    setRateLoading(false)
+    return
+  }
+
+  let cancelled = false
+
+  setRateLoading(true)
+  setRateError("")
+
+  Promise.all([
+    fetchRate(from.code, to.code),
+    fetchRateHistory(from.code, to.code),
+  ])
+    .then(([currentRate, historicalRates]) => {
+      if (cancelled) return
+
+      setRate(currentRate)
+      setHistory(historicalRates)
+
+      if (historicalRates.length) {
+        setLastUpdated(
+          historicalRates[historicalRates.length - 1].date
+        )
+      }
+    })
+    .catch((error) => {
+      if (cancelled) return
+      console.error("Exchange rate error:", error)
+      setRateError("Unable to load exchange rate")
+    })
+    .finally(() => {
+      if (!cancelled) setRateLoading(false)
+    })
+
+  return () => {
+    cancelled = true
+  }
+}, [from.code, to.code])
   const [amount, setAmount] = useState("1,000")
   const [dark, setDark] = useState(
     () => localStorage.getItem("convertly-theme") === "dark",
   )
 
   const numericAmount = Number(amount.replace(/,/g, "")) || 0
-  const rate = to.usdRate / from.usdRate
-  const converted = numericAmount * rate
-
+const converted = numericAmount * rate
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light"
     localStorage.setItem("convertly-theme", dark ? "dark" : "light")
   }, [dark])
 
-  const convertedText = useMemo(
-    () => formatNumber(converted, to.decimals),
-    [converted, to.decimals],
-  )
+  const convertedText = useMemo(() => {
+  if (rateLoading) return "Loading..."
+  if (rateError) return "Unavailable"
+
+  return formatNumber(converted, to.decimals)
+}, [converted, to.decimals, rateLoading, rateError])
 
   const updateAmount = (value: string) => {
     const cleaned = value.replace(/[^\d.]/g, "")
@@ -414,11 +638,13 @@ export default function App() {
           <span>Convertly</span>
         </a>
         <div className="header-actions">
-          <div className="rate-status" title="Rates are demonstration data">
-            <span className="status-dot" />
-            <span>Demo rates</span>
-            <span className="status-time">Updated 2 min ago</span>
-          </div>
+          <div className="rate-status" title="Exchange rate information">
+  <span className="status-dot" />
+  <span>Exchange rates</span>
+  <span className="status-time">
+    {lastUpdated ? `Rate date: ${lastUpdated}` : "Loading rate date..."}
+  </span>
+</div>
           <button
             className="theme-toggle"
             type="button"
@@ -441,16 +667,16 @@ export default function App() {
           <h1>
             Convert currencies <em>instantly.</em>
           </h1>
-          <p>Clear exchange rates for wherever life takes you.</p>
+          <p>Know what your money is worth in any currency.</p>
         </div>
 
         <div className="content-grid">
           <section className="converter-card" aria-label="Currency converter">
             <div className="demo-banner">
-              <span>DEMONSTRATION DATA</span>
-              <p>Sample rates for preview purposes — not live market rates.</p>
+              <span>EXCHANGE RATE</span>
+              <p>Reference rates for informational purposes only. Actual exchange rates may vary.</p>
             </div>
-
+     
             <div className="field-block">
               <label htmlFor="from-amount">YOU SEND</label>
               <div className="amount-row">
@@ -465,9 +691,10 @@ export default function App() {
                   />
                 </div>
                 <CurrencyPicker
-                  currency={from}
-                  onSelect={setFrom}
-                  label="source"
+                currency={from}
+                onSelect={setFrom}
+                label="source"
+                availableCurrencies={availableCurrencies}
                 />
               </div>
             </div>
@@ -496,11 +723,12 @@ export default function App() {
                     aria-label={`Converted amount in ${to.name}`}
                   />
                 </div>
-                <CurrencyPicker
-                  currency={to}
-                  onSelect={setTo}
-                  label="destination"
-                />
+                 <CurrencyPicker
+                   currency={to}
+                   onSelect={setTo}
+                   label="destination"
+                   availableCurrencies={availableCurrencies}
+                  />
               </div>
             </div>
 
@@ -521,22 +749,39 @@ export default function App() {
 
             <div className="rate-panel">
               <div className="rate-main">
-                <span>DEMONSTRATION RATE</span>
-                <strong>
-                  1 {from.code} = {rate.toFixed(rate > 100 ? 2 : 4)} {to.code}
+                <span>EXCHANGE RATE</span>
+                    <strong>
+                  {rateLoading
+                     ? "Loading exchange rate..."
+                   : rateError
+                   ? rateError
+           : `1 ${from.code} = ${rate.toFixed(rate > 100 ? 2 : 4)} ${to.code}`}
                 </strong>
-                <small>{`1 ${to.code} = ${(1 / rate).toFixed(4)} ${from.code}`}</small>
+                <small>
+                {rateLoading
+                ? "Fetching reverse rate..."
+                   : rateError || rate === 0
+                   ? "Reverse rate unavailable"
+                   : `1 ${to.code} = ${(1 / rate).toFixed(4)} ${from.code}`}
+                      </small>
               </div>
               <div className="rate-meta">
                 <span>
                   <Icon name="shield" size={18} /> Mid-market reference
                 </span>
-                <span>Last updated 2 min ago</span>
+                <span>
+              Lastest observation: {lastUpdated || "Unavailable"}
+             </span>
               </div>
             </div>
           </section>
 
-          <RateChart rate={rate} from={from} to={to} />
+          <RateChart
+            rate={rate}
+            from={from}
+            to={to}
+            history={history}
+          />
         </div>
 
         <div className="trust-row">
@@ -563,8 +808,8 @@ export default function App() {
               <Icon name="check" size={19} />
             </span>
             <p>
-              <strong>8 currencies</strong>
-              <span>More coming soon</span>
+              <strong>All available currencies</strong>
+              <span>Explore supported currencies</span>
             </p>
           </div>
         </div>

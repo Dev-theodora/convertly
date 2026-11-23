@@ -1,0 +1,42 @@
+{
+    "configurations": [
+        
+        
+        
+
+
+
+
+
+
+
+        {
+            "name": "Attach",
+            "port": 9229,
+            "request": "attach",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "type": "node"
+        },
+
+        
+
+
+
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "npm install currency-flags cryptocurrency-icons",
+            "runtimeExecutable": "npm",
+            "args": [
+                "install",
+                "currency-flags",
+                "cryptocurrency-icons"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen"
+        }
+    ]
+}

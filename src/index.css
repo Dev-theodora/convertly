@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
 @import 'tailwindcss';
-
+@import 'flag-icons/css/flag-icons.min.css';
 @layer base {
   :root {
     font-family: 'DM Sans', sans-serif;
@@ -171,6 +171,22 @@ main { max-width: 1160px; margin: 0 auto; padding: 56px 38px 38px; }
 .chart-wrap svg { width: 100%; height: 168px; overflow: visible; }
 .chart-grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 6; }
 .chart-line { fill: none; stroke: var(--blue); stroke-width: 3; vector-effect: non-scaling-stroke; }
+.chart-line.rising {
+  stroke: #16a34a;
+}
+
+.chart-line.falling {
+  stroke: #dc2626;
+}
+
+.trend-badge.rising {
+  color: #16a34a;
+}
+
+.trend-badge.falling {
+  color: #dc2626;
+}
+
 .chart-point { fill: var(--surface); stroke: var(--blue); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .chart-point.active { fill: var(--blue); stroke: var(--surface); stroke-width: 3; }
 .chart-labels { display: flex; justify-content: space-between; margin-top: 5px; color: var(--faint); font-size: 7px; font-weight: 700; }
@@ -226,6 +242,28 @@ footer { max-width: 1160px; margin: 0 auto; padding: 26px 38px 30px; display: fl
   .trust-row > div { justify-content: flex-start; width: 220px; margin: 0 auto; padding: 11px 0; border-right: 0; border-bottom: 1px solid var(--line); }
   footer { padding: 22px 18px 26px; }
 }
+
+.currency-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.currency-logo-fallback {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #64748b;
+  color: white;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
