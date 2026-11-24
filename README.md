@@ -15,6 +15,8 @@ Convertly is a currency converter designed to make checking exchange rates simpl
 - Switch between light and dark themes.
 - Responsive interface for different screen sizes.
 
+![Convertly Screenshot](public/convertly.png)
+
 ## Built With
 
 - React
